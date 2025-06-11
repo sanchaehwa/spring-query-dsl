@@ -1,0 +1,23 @@
+# IntelliJ 설정
+.idea/
+*.iml
+
+# Gradle
+.gradle/
+build/
+out/
+!gradle/wrapper/gradle-wrapper.jar
+generated
+
+# 기타 임시 폴더
+data/
+
+# 로그 파일
+*.log
+
+# 운영체제 관련
+.DS_Store
+Thumbs.db
+
+# 모든 .gitattributes 무시 (루트 + 하위 폴더 포함)
+**/.gitattributes
