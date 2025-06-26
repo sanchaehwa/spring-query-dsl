@@ -1,6 +1,7 @@
 package study.querydsl;
 
 import com.querydsl.core.QueryResults;
+import com.querydsl.core.Tuple;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +17,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static study.querydsl.entity.QMember.member;
+import static study.querydsl.entity.QTeam.team;
 
 @SpringBootTest
 @Transactional
@@ -150,4 +152,84 @@ public class QuerydslBasicTest {
         assertThat(queryResults.getOffset()).isEqualTo(1);
         assertThat(queryResults.getResults().size()).isEqualTo(2);
     }
+    //집합
+    @Test
+    public void aggregation(){
+        List<Tuple> result = jpaQueryFactory
+                .select( //대상이 두개 이상 튜플이나 DTO로 조회해야함.
+                        member.count(),
+                        member.age.sum(),
+                        member.age.avg(),
+                        member.age.max(),
+                        member.age.min())
+                .from(member)
+                .fetch();
+        Tuple tuple = result.get(0);
+        assertThat(tuple.get(member.count())).isEqualTo(4);
+        assertThat(tuple.get(member.age.sum())).isEqualTo(100);
+        assertThat(tuple.get(member.age.avg())).isEqualTo(25);
+        assertThat(tuple.get(member.age.max())).isEqualTo(40);
+        assertThat(tuple.get(member.age.min())).isEqualTo(10);
+    }
+    /*
+    팀의 이름과 각 팀의 평균 연령을 구하라
+     */
+    @Test
+    public void group() throws Exception{
+        List<Tuple> result = jpaQueryFactory
+                .select(team.name, member.age.avg())
+                .from(member)
+                .join(member.team, team)
+                .groupBy(team.name)
+                .fetch();
+
+        Tuple teamA = result.get(0);
+        Tuple teamB = result.get(1);
+
+        assertThat(teamA.get(team.name)).isEqualTo("teamA");
+        assertThat(teamA.get(member.age.avg())).isEqualTo(15);
+
+        assertThat(teamB.get(team.name)).isEqualTo("teamB");
+        assertThat(teamB.get(member.age.avg())).isEqualTo(35);
+
+        /*
+       // SQL 형태로 해석한 쿼리 설명
+                SELECT t.name, AVG(m.age)         -- 팀 이름과 해당 팀에 속한 멤버들의 평균 나이 조회
+                FROM member m                     -- 기준 테이블은 member
+                JOIN m.team t                     -- member가 소속된 team과 내부 조인
+                GROUP BY t.name                   -- 팀 이름 기준으로 그룹핑
+        */
+     }
+     //팀 A에 소속된 모든 회원
+     @Test
+     public void join() {
+         List<Member> result = jpaQueryFactory
+                 .selectFrom(member) // FROM Member
+                 .join(member.team, team) // 기본 Inner Join: member.team 과 team 간에 매칭되는 데이터가 있는 경우만 조회됨
+                 //.leftJoin(member.team, team) // Left Join: member 는 모두 유지되며, 연관된 team 이 없으면 null 로 채워짐
+                 //.rightJoin(member.team, team) // (참고) Right Join: team 은 모두 유지되며, 연관된 member 가 없으면 null 로 채워짐
+                 .where(team.name.eq("teamA")) // team 이름이 'teamA' 인 경우만 필터링
+                 .fetch();
+
+         assertThat(result)
+                 .extracting("username")
+                 .containsExactly("memberA", "memberB");
+     }
+
+    //연관관계 없이 Join - 세타조인, 회원의 이름이 팀 이름과 같은 회원 조회
+    @Test
+    public void thetaJoin() {
+        em.persist(new Member("teamA"));
+        em.persist(new Member("teamB"));
+
+        // 두 테이블(member, team)은 연관관계가 없지만,
+        // 모든 조합을 만든 후 조건 (member.username == team.name)에 맞는 데이터만 필터링하는 방식
+        // 즉, 이름이 우연히 같으면 임의 기준을 세워 조인하는 방식 → 세타조인(Theta Join)
+
+        List<Member> result = jpaQueryFactory.select(member)
+                .from(member, team) //연관 관게가 없는 두 테이블을 나란히 명시한뒤에
+                .where(member.username.eq(team.name)) //조인을 하고 필터링해서 원하는 정보만
+                .fetch();
+    }
+
 }
