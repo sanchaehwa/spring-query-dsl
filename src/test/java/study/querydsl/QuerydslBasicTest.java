@@ -4,6 +4,8 @@ import com.querydsl.core.QueryResults;
 import com.querydsl.core.Tuple;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.PersistenceUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -230,6 +232,82 @@ public class QuerydslBasicTest {
                 .from(member, team) //연관 관게가 없는 두 테이블을 나란히 명시한뒤에
                 .where(member.username.eq(team.name)) //조인을 하고 필터링해서 원하는 정보만
                 .fetch();
+        assertThat(result)
+                .extracting("username")
+                .containsExactly("teamA", "teamB");
     }
+    /*
+    회원과 팀을 조인하면서, 팀 이름이 teamA 인 팀만 조회, 회원은 모두 조회
+     */
+    @Test
+    public void join_on_filtering() {
+        List<Tuple> result = jpaQueryFactory
+                .select(member, team) //selectFrom 이 아닌, From 만 정의하면  이후에 select() 별도로 지정해줘야함 - 조인하거나 복잡한 쿼리 구성할때는 이 방법이 좋음
+                .from(member)
+                .leftJoin(member.team, team).on(team.name.eq("teamA")) //teamA가 아닌 회원은  null 채워서 반환 *leftjoin = on 절
+                //on(team.name.eq("teamA")) == where(team.name.eq("teamA"))
+                .fetch();
+        for (Tuple tuple : result) {
+            System.out.println("tuple = " + tuple);
+        }
+    }
+    /*
+    연관관계 없는 엔티티 외부조인
+    회원의 이름이 팀 이름과 같은 대상 외부 조인
+     */
+    @Test
+    public void join_on_no_relation(){
+        em.persist(new Member("teamA"));
+        em.persist(new Member("teamB"));
+        em.persist(new Member("teamC"));
+
+        List<Tuple> result = jpaQueryFactory
+                .select(member,team)
+                .from(member)
+                .leftJoin(team).on(member.username.eq(team.name))
+                .fetch();
+        for (Tuple tuple : result) {
+            System.out.println("tuple = " + tuple);
+        }
+    }
+
+    @PersistenceUnit
+    EntityManagerFactory emf;
+
+    //주로 성능최적화를 위해 Fetch Join을 씀
+    @Test
+    public void fetchJoinNo(){
+        //DB에 우선 반영
+        em.flush();
+        //영속성 컨텍스트 비우고
+        em.clear();
+
+        Member findMember = jpaQueryFactory
+                .selectFrom(member)
+                .where(member.username.eq("member1"))
+                .fetchOne();
+        boolean loaded = emf.getPersistenceUnitUtil().isLoaded(findMember.getTeam());
+        assertThat(loaded).as("패치 조인 미적용").isFalse();
+
+    }
+
+
+    @Test
+    public void fetchJoinUse(){
+        //DB에 우선 반영
+        em.flush();
+        //영속성 컨텍스트 비우고
+        em.clear();
+
+        Member findMember = jpaQueryFactory
+                .selectFrom(member)
+                .join(member.team, team).fetchJoin()
+                .where(member.username.eq("member1"))
+                .fetchOne();
+        boolean loaded = emf.getPersistenceUnitUtil().isLoaded(findMember.getTeam());
+        assertThat(loaded).as("패치 조인 적용").isFalse();
+
+    }
+
 
 }
