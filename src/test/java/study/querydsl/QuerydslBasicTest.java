@@ -2,6 +2,9 @@ package study.querydsl;
 
 import com.querydsl.core.QueryResults;
 import com.querydsl.core.Tuple;
+import com.querydsl.core.types.dsl.CaseBuilder;
+import com.querydsl.core.types.dsl.Expressions;
+import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
@@ -308,6 +311,127 @@ public class QuerydslBasicTest {
         assertThat(loaded).as("패치 조인 적용").isFalse();
 
     }
+
+    @Test
+    public void subQuery() {
+        QMember memberSub = new QMember("memberSub"); //서브쿼리에서 사용할 Q타입 인스턴스
+//QueryDSL은 하나의 쿼리 안에 같은 엔티티(Member)를 두번 참조할수 없으니깐 별칭이 다른 인스턴스 생성
+        List<Member> result = jpaQueryFactory
+                .selectFrom(member) //메인 쿼리 대상의 Member : 싱글톤 사용가능 (싱글톤 -> QueryDSL이 자동으로 생성해주는것)
+                .where(member.age.eq(
+                        JPAExpressions
+                                .select(memberSub.age.max()) //
+                                .from(memberSub)
+                ))
+                .fetch();
+        assertThat(result).extracting("age")
+                .containsExactly(40);
+    }
+    /**
+     * 나이가 평균  이상인 회원 조회
+     */
+    @Test
+    public void subQueryGoe(){
+
+        QMember memberSub = new QMember("memberSub");
+        List<Member> result = jpaQueryFactory
+                .selectFrom(member)
+                .where(member.age.goe(
+                        JPAExpressions
+                                .select(memberSub.age.avg())
+                                .from(memberSub)
+                ))
+                .fetch();
+        assertThat(result).extracting("age")
+                .containsExactly(30,40);
+
+    }
+    //IN절
+    @Test
+    public void subQueryIn(){
+
+        QMember memberSub = new QMember("memberSub");
+        List<Member> result = jpaQueryFactory
+                .selectFrom(member)
+                .where(member.age.in(
+                        JPAExpressions
+                                .select(memberSub.age)
+                                .from(memberSub)
+                                .where(memberSub.age.gt(10)) //10보다 큰 값들의 집합에 포함되는지
+                ))
+                .fetch();
+        assertThat(result).extracting("age")
+                .containsExactly(20,30,40);
+    }
+    //select절
+    @Test
+    public void selectSubQuery(){
+        QMember memberSub = new QMember("memberSub");
+        List<Tuple> result = jpaQueryFactory
+                .select(member.username,
+                        JPAExpressions
+                                .select(memberSub.age.avg()) //나이의 평균
+                                .from(memberSub))
+                .from(member)
+                .fetch();
+        for (Tuple tuple : result) {
+            System.out.println("tuple = " + tuple);
+        }
+    }
+    //Case문
+    @Test
+    public void basicCase(){
+        List<String> result = jpaQueryFactory
+                .select(member.age
+                        .when(10).then("열살 ") //10살이면 열살
+                        .when(20).then("스무살") //20살이면 스무살
+                        .otherwise("기타")) //그외는 기타
+                .from(member)
+                .fetch();
+        for (String s : result){
+            System.out.println("s = " + s);
+        }
+    }
+    @Test
+    public void complexCase(){
+        List<String> result = jpaQueryFactory
+                .select(new CaseBuilder()
+                        .when(member.age.between(0, 20)).then("0~20살")
+                        .when(member.age.between(21, 30)).then("21~30살")
+                        .otherwise("기타"))
+                .from(member)
+                .fetch();
+        for (String s : result){
+            System.out.println("s = " + s);
+        }
+    }
+    @Test
+    public void contant() {
+        List<Tuple> result = jpaQueryFactory
+                .select(member.username, Expressions.constant("A"))
+                .from(member)
+                .fetch();
+        for (Tuple tuple : result){
+            System.out.println("tuple = " + tuple);
+        }
+    }
+    //문자 더하기
+    @Test
+    public void concat() {
+        //username_age
+        List<String> result = jpaQueryFactory
+                .select(member.username.concat("_").concat(member.age.stringValue())) //stringValue 로 바꿨기 때문에 캐스팅 된것
+                .from(member)
+                .where(member.username.eq("memberA"))
+                .fetch();
+        for (String s : result){
+            System.out.println("s = " + s);
+        }
+
+
+    }
+
+
 
 
 }
