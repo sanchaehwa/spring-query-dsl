@@ -1,5 +1,6 @@
 package study.querydsl;
 
+import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.QueryResults;
 import com.querydsl.core.Tuple;
 import com.querydsl.core.types.ExpressionUtils;
@@ -523,7 +524,7 @@ public class QuerydslBasicTest {
     @Test
     public void findDtoByConstructor() {
         List<MemberDto> result = jpaQueryFactory
-                .select(Projections.constructor(MemberDto.class, member.username, member.age)) //타입이 일치해야 호출 - (Username String, Age Int)
+                .select(Projections.constructor(MemberDto.class, member.username, member.age)) //타입이 일치해야 호출 - (Username String, Age Int) (타입이 일치하지 않을 경우, 컴파일 오류는 못 잡고, 런타임 오류가 발생함(코드를 실행하는 순간에서 문제를 찾을 수 있다는 것 )
                 .from(member)
                 .fetch();
         for (MemberDto memberDto : result) {
@@ -552,16 +553,39 @@ public class QuerydslBasicTest {
 
     }
 
-    //DTO - Q파일로 생성
+    //DTO - Q파일로 생성 : QueryDSl로 생성자 접근 방식 (생성자 접근 방식과 달리 QueryDSl로 쓰면 컴파일 에러가 나기때문에 실행하지않아도 문제점 파악 가능) **** DTO 자체가 QueryDSl에 의존적이기때문에 깔끔하게 DTO를 가지고온다 하면 (Basic) 생성자 방식 사용
     @Test
     public void findDtoByQueryProjection() {
         List<MemberDto> result = jpaQueryFactory //생성자를 그대로 가져오기때문에, 타입 맞춰줌 - 안정적으로 DTO Q파일을 가져올수있다
-                .select(new QMemberDto(member.username, member.age))
+                .select(new QMemberDto(member.username, member.age)) //queryDSL 에서 username , age만 타입으로 설정 다른 타입이 들어오면 에러 발생
                 .from(member)
                 .fetch();
         for(MemberDto memberDto : result){
             System.out.println("memberDto = " + memberDto);
         }
+    }
+    @Test
+    public void dynamicQuery_BooleanBuilder() {
+        String usernameParam = "memberA";
+        Integer ageParam = null; //둘다 Null이면 조건문에 안들어감 조건이 - 하나라도 Null이 아니면, 그 조건이 들어감
+
+        List<Member> result = searchMember1(usernameParam, ageParam);
+        assertThat(result.size()).isEqualTo(1);
+    }
+
+    private List<Member> searchMember1(String usernameCond, Integer ageCond) {
+       BooleanBuilder builder = new BooleanBuilder(); //QueryDSl에서 조건을 동적으로 추가할 때
+       if (usernameCond != null) {
+           builder.and(member.username.eq(usernameCond));
+       }
+       if (ageCond != null) {
+           builder.and(member.age.eq(ageCond));
+       }
+
+        return jpaQueryFactory
+                .selectFrom(member)
+                .where(builder) //위에 Builder에 대한 결과가 출력됨
+                .fetch();
     }
 
 }

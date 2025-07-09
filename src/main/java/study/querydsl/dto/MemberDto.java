@@ -13,6 +13,7 @@ public class MemberDto {
     private int age;
 
     //DTO를 Q파일로 생성해주는것
+    //QueryDSl에 의존적인 DTO가 됨 => 순수하지 못함
     @QueryProjection
     public MemberDto(String username, int age) {
         this.username = username;
