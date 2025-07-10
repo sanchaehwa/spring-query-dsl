@@ -4,7 +4,9 @@ import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.QueryResults;
 import com.querydsl.core.Tuple;
 import com.querydsl.core.types.ExpressionUtils;
+import com.querydsl.core.types.Predicate;
 import com.querydsl.core.types.Projections;
+import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.dsl.CaseBuilder;
 import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.jpa.JPAExpressions;
@@ -16,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.Commit;
 import org.springframework.transaction.annotation.Transactional;
 import study.querydsl.dto.MemberDto;
 import study.querydsl.dto.QMemberDto;
@@ -586,6 +589,81 @@ public class QuerydslBasicTest {
                 .selectFrom(member)
                 .where(builder) //위에 Builder에 대한 결과가 출력됨
                 .fetch();
+    }
+    //동적 쿼리 - Where 다중 파라미터 사용 : 여러 조건들을 조합할때 유용
+    @Test
+    public void dynamicQuery_WhereParam() {
+        String usernameParam = "memberA";
+        Integer ageParam = null;
+
+        List<Member> result = searchMember2(usernameParam,ageParam);
+        assertThat(result.size()).isEqualTo(1);
+    }
+
+    private List<Member> searchMember2(String usernameCond, Integer ageCond) {
+        return  jpaQueryFactory
+                .selectFrom(member)
+               // .where(usernameEq(usernameCond), ageEq(ageCond))
+                .where(allEq(usernameCond, ageCond))
+                .fetch();
+    }
+
+
+    private BooleanExpression usernameEq(String usernameCond) {
+//        if (usernameCond == null) {
+//            return null;
+//        }else{
+//            return member.username.eq(usernameCond);
+//
+//        }
+        //간단할 경우에는 삼항 연산자 사용
+        return usernameCond != null ? member.username.eq(usernameCond) : null; //null이 아닌경우  member.username.eq(usernameCond) 반환 --- null인 경우에는 null 반환
+    }
+
+    private BooleanExpression ageEq(Integer ageCond) {
+        return ageCond != null ? member.age.eq(ageCond) : null;
+
+    }
+    //두 조건을 모두 만족해야한다면 -> AND 로 두 조건을 조합해야하는데 위 조건들을 조합하려면 Predicate가 아닌, BooleanExpression을 써야함
+    private BooleanExpression allEq(String usernameCond, Integer ageCond) {
+        return usernameEq(usernameCond).and(ageEq(ageCond));
+    }
+    //수정 ,삭제 같은 것을 한번에 처리할 수 있는 배치 쿼리 => 벌크 연산 : 대량의 데이터를 수정할 떄 사용
+    @Test
+    public void bulkUpdate() {
+        //벌크 연산은 영속성 컨텍스트를 무시하고 DB에 바로 쿼리 날림 : DB의 상태와 영속성 컨텍스트의 상태가 달라짐
+        //memberA = 10 -> DB 비회원 영속성 컨텍스트 memberA
+        //memberB = 20 -> DB 비회원 // memberB
+        //memberC = 30 -> DB memberC // memberC
+        //memberD = 40 -> DB memberD //memberD
+        long count = jpaQueryFactory
+                .update(member)
+                .set(member.username, "비회원")
+                .where(member.age.lt(28)) //28살 이하인 맴버의 이름을 비회원으로 바꿈
+                .execute();
+        //영속성 컨텍스트의 값을 초기화하면서 -> 영속성 컨텍스트에 이미 값이 있는 상태가 아니니깐 DB에서 가져온 값을 영속성 컨텍스트에 넣을수 있음 : 벌크 연산 문제점 해결
+        em.flush();
+        em.clear();
+        List<Member> result = jpaQueryFactory.selectFrom(member).fetch();
+        //DB - 값을 넣어줌 이때 JPA가 영속성컨텍스트에 이미 값이 있으면 (값이) 그러면 DB에서 가져온 값을 버림 =>영속성 컨텍스트가 항상 우선권을 가짐 :
+        for (Member member : result) {
+            System.out.println("member = " + member);
+        }
+    }
+
+    @Test
+    public void bulkAdd(){
+        long count = jpaQueryFactory
+                .update(member)
+                .set(member.age, member.age.add(1)) //multiply : 곱
+                .execute();
+    }
+    @Test
+    public void bulkDelete(){
+        long execute = jpaQueryFactory
+                .delete(member)
+                .where(member.age.gt(18))
+                .execute(); //18이상인 맴버인 경우에는 삭제
     }
 
 }
