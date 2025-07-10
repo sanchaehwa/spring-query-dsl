@@ -666,4 +666,31 @@ public class QuerydslBasicTest {
                 .execute(); //18이상인 맴버인 경우에는 삭제
     }
 
+    //SQL Function 호출하기 (JPA와 같은 Dialect에 등록된 내용만 호출할 수 있음)
+    @Test
+    public void sqlFunction() {
+        List<String> result = jpaQueryFactory
+                .select(Expressions.stringTemplate(
+                        "function('replace', {0}, {1}, {2})",//첫번쨰 파라미터 -> Member.username, 두번쨰 파라미터 -> Member , 세번찌 파라미터 'M
+                        member.username, "member", "M")) //Member 를 M으로 바꿔서 조회
+                .from(member)
+                .fetch();
+        for (String s : result) {
+            System.out.println("s = " + s);
+        }
+    }
+    @Test
+    public void sqlFunction2() {
+        List<String> result = jpaQueryFactory
+                .select(member.username)
+                .from(member)
+//                .where(member.username.eq(Expressions.stringTemplate(
+//                        "function('lower',{0})", member.username //소문자로 바꾸는 경우
+//                )))
+                .where(member.username.eq(member.username.lower()))
+                .fetch();
+        for (String s: result) {
+            System.out.println("s = " + s);
+        }
+    }
 }
