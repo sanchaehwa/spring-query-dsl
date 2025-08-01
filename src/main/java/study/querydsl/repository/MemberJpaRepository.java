@@ -45,7 +45,7 @@ public class MemberJpaRepository {
      * 즉, JPA가 엔티티를 영속성 컨텍스트에서 관리하고 있어야
      * QueryDSL을 통해 해당 엔티티를 조회하거나 조건을 걸 수 있다.
      */
-    public Optional<Member> findById(Long id) {
+    public Optional<Member>  findById(Long id) {
         Member findMember = em.find(Member.class, id);
         return Optional.ofNullable(findMember);
     }
